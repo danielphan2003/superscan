@@ -143,7 +143,7 @@ object Notifications {
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setCategory(if (alert) android.app.Notification.CATEGORY_ERROR else android.app.Notification.CATEGORY_STATUS)
-            .setColor(if (alert) 0xFFD9473F.toInt() else 0xFF2E9E6B.toInt())
+            .setColor(if (alert) 0xFFAD3835.toInt() else 0xFF286858.toInt())
             .build()
         val nm = context.getSystemService(NotificationManager::class.java)
         // One notification per incident, and one for news without an incident:

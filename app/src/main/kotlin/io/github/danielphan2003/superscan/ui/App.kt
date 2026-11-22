@@ -6,50 +6,62 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.snapshots.SnapshotStateList
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -71,12 +83,31 @@ sealed interface Route {
     data class Check(val id: String) : Route
 }
 
+private val RouteStackSaver = listSaver<SnapshotStateList<Route>, String>(
+    save = { routes -> routes.map { route ->
+        when (route) {
+            Route.Home -> "home"
+            Route.Incidents -> "incidents"
+            is Route.Incident -> "incident:${route.id}"
+            is Route.Check -> "check:${route.id}"
+        }
+    } },
+    restore = { routes -> routes.map { value ->
+        when {
+            value == "incidents" -> Route.Incidents
+            value.startsWith("incident:") -> Route.Incident(value.substringAfter(':').toInt())
+            value.startsWith("check:") -> Route.Check(value.substringAfter(':'))
+            else -> Route.Home
+        }
+    }.toMutableStateList() },
+)
+
 @Composable
 fun SuperscanApp(activity: ComponentActivity, requestedIncident: MutableState<Int?>) {
     val context = LocalContext.current
     val store = remember { Store(context) }
     var paired by remember { mutableStateOf(store.paired) }
-    val stack = remember { mutableStateListOf<Route>(Route.Home) }
+    val stack = rememberSaveable(saver = RouteStackSaver) { mutableStateListOf<Route>(Route.Home) }
 
     // A tapped notification asks for its incident; open it on top of whatever is shown.
     val requested = requestedIncident.value
@@ -93,12 +124,26 @@ fun SuperscanApp(activity: ComponentActivity, requestedIncident: MutableState<In
     }
     if (stack.size > 1) BackHandler { stack.removeAt(stack.lastIndex) }
     val back = { if (stack.size > 1) stack.removeAt(stack.lastIndex) }
+    val screenState = rememberSaveableStateHolder()
     MonitorData(store) { data ->
-        when (val route = stack.last()) {
-            Route.Home -> HomeScreen(activity, store, data, navigate = { stack.add(it) }, onUnpaired = { paired = false; stack.clear(); stack.add(Route.Home) })
-            Route.Incidents -> IncidentsScreen(data, onBack = back, open = { stack.add(Route.Incident(it)) })
-            is Route.Incident -> IncidentScreen(data, route.id, onBack = back, openCheck = { stack.add(Route.Check(it)) })
-            is Route.Check -> CheckScreen(data, route.id, onBack = back, openIncident = { stack.add(Route.Incident(it)) })
+        // Compose scales these animations with Android's animator duration setting.
+        AnimatedContent(
+            targetState = stack.toList(), contentKey = { it.last() }, label = "navigation",
+            transitionSpec = {
+                val forward = targetState.size > initialState.size
+                (slideInHorizontally(tween(200)) { if (forward) it / 10 else -it / 10 } + fadeIn(tween(200)))
+                    .togetherWith(slideOutHorizontally(tween(150)) { if (forward) -it / 10 else it / 10 } + fadeOut(tween(150)))
+            },
+        ) { destinations ->
+            val route = destinations.last()
+            screenState.SaveableStateProvider(route.toString()) {
+                when (route) {
+                    Route.Home -> HomeScreen(activity, store, data, navigate = { stack.add(it) }, onUnpaired = { paired = false; stack.clear(); stack.add(Route.Home) })
+                    Route.Incidents -> IncidentsScreen(data, onBack = back, open = { stack.add(Route.Incident(it)) })
+                    is Route.Incident -> IncidentScreen(data, route.id, onBack = back, openCheck = { stack.add(Route.Check(it)) })
+                    is Route.Check -> CheckScreen(data, route.id, onBack = back, openIncident = { stack.add(Route.Incident(it)) })
+                }
+            }
         }
     }
 }
@@ -122,8 +167,8 @@ fun connectPush(activity: ComponentActivity, store: Store, vapid: String?) {
 private fun SetupScreen(activity: ComponentActivity, onPaired: () -> Unit) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var server by remember { mutableStateOf("https://") }
-    var code by remember { mutableStateOf("") }
+    var server by rememberSaveable { mutableStateOf("") }
+    var code by rememberSaveable { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     val distributors = remember { UnifiedPush.getDistributors(context).filter { it != context.packageName } }
@@ -160,58 +205,60 @@ private fun SetupScreen(activity: ComponentActivity, onPaired: () -> Unit) {
         else permission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    Scaffold { padding ->
-        Column(
-            Modifier.padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-        ) {
-            Box(
-                Modifier.size(88.dp).clip(CircleShape).background(colorResource(R.color.ic_launcher_background)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(132.dp))
-            }
-            Text("Superscan", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-            Text(
-                "Your monitor's checks, incidents and alerts, delivered through UnifiedPush.",
-                style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        if (distributors.isNotEmpty()) Icons.Filled.CheckCircle else Icons.Filled.Info, null,
-                        tint = if (distributors.isNotEmpty()) StatusColors.ok else MaterialTheme.colorScheme.primary,
-                    )
-                    Text(
-                        if (distributors.isNotEmpty()) "Alerts will come through ${distributorName(context, distributors.first())}."
-                        else "Install a UnifiedPush distributor such as Sunup or ntfy to get alerts. You can pair now and add one later.",
-                        Modifier.padding(start = 12.dp), style = MaterialTheme.typography.bodyMedium,
-                    )
+    Scaffold(
+        bottomBar = {
+            Column(Modifier.imePadding().navigationBarsPadding().padding(horizontal = 20.dp, vertical = 16.dp)) {
+                Button(onClick = { start() }, enabled = ready, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    if (busy) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    else Text("Pair monitor")
                 }
             }
-
+        },
+    ) { padding ->
+        Column(
+            Modifier.padding(padding).consumeWindowInsets(padding).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+        ) {
+            Box(
+                Modifier.size(64.dp).clip(CircleShape).background(colorResource(R.color.ic_launcher_background)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(painterResource(R.drawable.ic_launcher_foreground), contentDescription = null, modifier = Modifier.size(96.dp))
+            }
+            Text("Superscan", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.displaySmall)
+            Text(
+                "Your checks and incidents, with alerts delivered through UnifiedPush.",
+                Modifier.padding(top = 8.dp, bottom = 32.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             OutlinedTextField(
                 value = server, onValueChange = { server = it.trim() }, label = { Text("Monitor address") },
+                placeholder = { Text("https://monitor.example.com") }, shape = RoundedCornerShape(12.dp),
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
             )
+            Spacer(Modifier.height(16.dp))
             OutlinedTextField(
                 value = code, onValueChange = { code = it.uppercase().take(12) }, label = { Text("Pairing code") },
-                supportingText = { Text("A one-time code from whoever runs the monitor, like ABCD-2345.") },
+                placeholder = { Text("ABCD-2345") }, shape = RoundedCornerShape(12.dp),
+                supportingText = { Text("A one-time code from your monitor.") },
                 singleLine = true, modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { if (ready) start() }),
             )
+            val tone = statusTone(if (distributors.isNotEmpty()) "ok" else "warn")
+            Row(
+                Modifier.padding(top = 24.dp).fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(tone.container).padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(if (distributors.isNotEmpty()) Icons.Rounded.CheckCircle else Icons.Rounded.Info, null, Modifier.size(18.dp), tint = tone.foreground)
+                Text(
+                    if (distributors.isNotEmpty()) "Alerts via ${distributorName(context, distributors.first())}"
+                    else "Install Sunup or ntfy to receive alerts. You can pair now and add one later.",
+                    Modifier.padding(start = 10.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             error?.let {
-                ElevatedCard(colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                    Text("Couldn't pair: $it", Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onErrorContainer)
-                }
+                Text("Couldn't pair: $it", Modifier.padding(top = 16.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
             }
-            Button(onClick = { start() }, enabled = ready, modifier = Modifier.fillMaxWidth().height(52.dp)) {
-                Text(if (busy) "Pairing…" else "Pair")
-            }
-            Spacer(Modifier.height(8.dp))
         }
     }
 }

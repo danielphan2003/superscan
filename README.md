@@ -16,12 +16,13 @@ activated tower.
   UnifiedPush distributor and hands the monitor its push endpoint. The
   monitor confirms with an "Alerts are on" notification. Superscan asks for
   the notification permission before pairing, so that one is not lost.
-- **Status:** a summary card (healthy checks, 30-day uptime, last check),
-  recent incidents, and the checks in groups that stay folded while all is
-  well ("14 of 14 up") and open by themselves when something is down. Each
-  check shows its response time and 30 daily uptime bars; tap it for the
-  details, what is checked and its incidents. It refreshes every 30 seconds
-  while open, and on pull.
+- **Status:** a summary of healthy checks and 30-day uptime, with the last
+  update in the header. One Checks card groups websites, services behind
+  the login, mail, and the monitor. Groups stay folded while all is well
+  ("14 of 14 up") and open when something needs attention. Each check shows
+  its response time, uptime, and 30 daily history bars. Tap a check for
+  details and its incidents. Recent incidents appear when there are any.
+  It refreshes every 30 seconds while open, and on pull.
 - **Incidents:** ongoing and resolved, each with its affected checks and a
   timeline from the first failure to the recovery.
 - **Notifications:** full text, one per incident (updates replace it), and a
@@ -68,6 +69,12 @@ pointed at this repository.
 
 ## Credits
 
-The layout follows GrapheneOS's [Info](https://github.com/GrapheneOS/Info)
-app; push handling uses the UnifiedPush
-[connector library](https://codeberg.org/UnifiedPush/android-connector).
+Superscan uses [Manrope](https://github.com/sharanda/manrope) by Mikhail
+Sharanda and Mirko Velimirovic under the SIL Open Font License 1.1. The
+[font license and source](licenses/manrope/README.md) are bundled here.
+Colors follow your wallpaper when available, with a teal fallback and
+separate light and dark status palettes.
+
+The original layout was based on GrapheneOS's
+[Info](https://github.com/GrapheneOS/Info) app. Push handling uses the
+UnifiedPush [connector library](https://codeberg.org/UnifiedPush/android-connector).

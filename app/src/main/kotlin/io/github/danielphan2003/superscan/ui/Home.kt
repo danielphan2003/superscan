@@ -4,10 +4,13 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,53 +18,55 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.ErrorOutline
-import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.NotificationsOff
-import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MediumTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -74,10 +79,10 @@ import io.github.danielphan2003.superscan.Incident
 import io.github.danielphan2003.superscan.Status
 import io.github.danielphan2003.superscan.Store
 import io.github.danielphan2003.superscan.syncEndpoint
+import java.time.Instant
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.unifiedpush.android.connector.UnifiedPush
-import java.time.Instant
 
 val GROUPS = linkedMapOf(
     "site" to "Websites",
@@ -149,8 +154,12 @@ fun HomeScreen(
     val snackbar = remember { SnackbarHostState() }
     var menu by remember { mutableStateOf(false) }
     var confirmUnpair by remember { mutableStateOf(false) }
-    val expanded = remember { mutableStateMapOf<String, Boolean>() }
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val listState = rememberLazyListState()
+    val scrolled by remember(listState) {
+        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 }
+    }
+    var forcedOpen by rememberSaveable { mutableStateOf(emptyList<String>()) }
+    var forcedClosed by rememberSaveable { mutableStateOf(emptyList<String>()) }
 
     fun reRegister() = scope.launch {
         val vapid = runCatching { Api(store.server!!).info().second }.getOrNull()
@@ -159,14 +168,14 @@ fun HomeScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
-            MediumTopAppBar(
-                title = { Text(store.monitorName ?: "Superscan", maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                scrollBehavior = scrollBehavior,
+            InstrumentHeader(
+                title = data.status?.name ?: store.monitorName ?: "Superscan",
+                subtitle = data.status?.let { "Updated ${ago(it.now, data.now)} · every minute" } ?: "Connecting to your monitor",
+                scrolled = scrolled,
                 actions = {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "More options") }
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More options") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Send test alert") }, onClick = {
                             menu = false
@@ -199,17 +208,17 @@ fun HomeScreen(
             modifier = Modifier.padding(padding).fillMaxSize(),
         ) {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                state = listState,
+                contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 store.pushProblem?.let { problem ->
-                    item(key = "push") { Notice(Icons.Filled.NotificationsOff, problem, "Retry") { reRegister() } }
+                    item(key = "push") { Notice(Icons.Rounded.NotificationsOff, problem, "Retry") { reRegister() } }
                 }
                 if (data.error != null) {
                     item(key = "error") {
                         Notice(
-                            Icons.Filled.WifiOff,
+                            Icons.Rounded.WifiOff,
                             if (data.status == null) "Can't reach the monitor: ${data.error}" else "Can't reach the monitor; showing what it said ${ago(data.loadedAt?.toString(), data.now)}.",
                             "Retry", data.refresh,
                         )
@@ -217,43 +226,39 @@ fun HomeScreen(
                 }
                 val s = data.status
                 if (s == null) {
-                    if (data.error == null) item(key = "loading") { Text("Loading…", Modifier.padding(8.dp), color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    if (data.error == null) item(key = "loading") { QuietProgress() }
                     return@LazyColumn
                 }
-                item(key = "hero") { HeroCard(s, data) { navigate(Route.Incident(it)) } }
+                item(key = "hero") { HeroCard(s) { navigate(Route.Incident(it)) } }
 
-                val recent = s.incidents.take(3)
-                item(key = "incidents-header") {
-                    SectionHeader("Recent incidents") {
-                        if (s.incidents.isNotEmpty()) TextButton(onClick = { navigate(Route.Incidents) }) { Text("All ${s.incidents.size}") }
-                    }
-                }
-                item(key = "incidents") {
-                    if (recent.isEmpty()) {
-                        Text("No incidents so far.", Modifier.padding(horizontal = 4.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    } else ElevatedCard(Modifier.fillMaxWidth()) {
-                        recent.forEachIndexed { i, inc ->
-                            if (i > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                            IncidentRow(inc, data.now) { navigate(Route.Incident(inc.id)) }
+                item(key = "checks") {
+                    SectionHeader("Checks")
+                    FlatCard {
+                        val groups = GROUPS.entries.filter { (group, _) -> s.checks.any { it.group == group } }
+                        groups.forEachIndexed { index, (group, label) ->
+                            val checks = s.checks.filter { it.group == group }
+                            val open = group in forcedOpen || (group !in forcedClosed && checks.any { !it.healthy })
+                            if (index > 0) InsetDivider()
+                            CheckGroup(label, checks, open, onToggle = {
+                                if (open) { forcedClosed = forcedClosed + group; forcedOpen = forcedOpen - group }
+                                else { forcedOpen = forcedOpen + group; forcedClosed = forcedClosed - group }
+                            }) { navigate(Route.Check(it)) }
                         }
                     }
                 }
-
-                for ((group, label) in GROUPS) {
-                    val checks = s.checks.filter { it.group == group }
-                    if (checks.isEmpty()) continue
-                    item(key = "group-$group") {
-                        val healthy = checks.all { it.healthy }
-                        val open = expanded[group] ?: !healthy
-                        GroupCard(label, checks, open, onToggle = { expanded[group] = !open }) { navigate(Route.Check(it)) }
+                val recent = s.incidents.take(3)
+                if (recent.isNotEmpty()) {
+                    item(key = "incidents") {
+                        SectionHeader("Recent incidents") {
+                            if (s.incidents.size > 3) TextButton(onClick = { navigate(Route.Incidents) }) { Text("See all") }
+                        }
+                        FlatCard {
+                            recent.forEachIndexed { i, inc ->
+                                if (i > 0) InsetDivider()
+                                IncidentRow(inc, data.now) { navigate(Route.Incident(inc.id)) }
+                            }
+                        }
                     }
-                }
-                item(key = "footer") {
-                    Text(
-                        "Checked every minute from outside your network. Pull down to refresh.",
-                        Modifier.fillMaxWidth().padding(top = 8.dp), style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }
@@ -282,52 +287,54 @@ fun HomeScreen(
 
 @Composable
 private fun Notice(icon: ImageVector, text: String, action: String? = null, onAction: () -> Unit = {}) {
-    ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 12.dp, bottom = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.onErrorContainer)
-            Text(text, Modifier.weight(1f).padding(horizontal = 12.dp), color = MaterialTheme.colorScheme.onErrorContainer, style = MaterialTheme.typography.bodyMedium)
+    val tone = statusTone("warn")
+    FlatCard(Modifier.padding(bottom = 16.dp), color = tone.container, border = tone.border) {
+        Row(Modifier.padding(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, Modifier.size(20.dp), tint = tone.foreground)
+            Text(text, Modifier.weight(1f).padding(horizontal = 12.dp), style = MaterialTheme.typography.bodyMedium)
             action?.let { TextButton(onClick = onAction) { Text(it) } }
         }
     }
 }
 
 @Composable
-private fun HeroCard(s: Status, data: MonitorState, openIncident: (Int) -> Unit) {
+private fun HeroCard(s: Status, openIncident: (Int) -> Unit) {
     val open = s.incidents.firstOrNull { it.ended == null }
     val state = if (open != null) "down" else worst(s.checks)
     val (icon, title) = when (state) {
-        "down" -> Icons.Filled.ErrorOutline to (open?.title ?: "${s.checks.count { it.status == "down" }} checks down")
-        "warn" -> Icons.Filled.WarningAmber to "Recovering"
-        else -> Icons.Filled.CheckCircle to "All systems operational"
+        "down" -> Icons.Rounded.Error to "Checks need attention"
+        "warn" -> Icons.Rounded.Warning to "Recovering"
+        "unknown" -> Icons.Rounded.Schedule to "Waiting for checks"
+        else -> Icons.Rounded.CheckCircle to "All systems operational"
     }
-    val container = when (state) {
-        "down" -> MaterialTheme.colorScheme.errorContainer
-        "warn" -> StatusColors.warn.copy(alpha = 0.22f).compositeOver(MaterialTheme.colorScheme.surfaceContainerHigh)
-        else -> StatusColors.ok.copy(alpha = 0.18f).compositeOver(MaterialTheme.colorScheme.surfaceContainerHigh)
-    }
-    // Weighted by runs, so a check with a handful of runs cannot swing it.
+    val waiting = s.checks.count { it.status == "unknown" }
+    val tone = statusTone(state)
+    val container by animateColorAsState(tone.container, tween(200), label = "status surface")
+    val border by animateColorAsState(tone.border, tween(200), label = "status border")
+    val foreground by animateColorAsState(tone.foreground, tween(200), label = "status icon")
     val runs = s.checks.sumOf { c -> c.days.sumOf { it.ok + it.fail } }
     val overall = if (runs == 0) null else s.checks.sumOf { c -> c.days.sumOf { it.ok } } * 100.0 / runs
-    ElevatedCard(
-        Modifier.fillMaxWidth().let { m -> open?.let { o -> m.clickable { openIncident(o.id) } } ?: m },
-        colors = CardDefaults.elevatedCardColors(containerColor = container),
+    FlatCard(
+        Modifier.let { m -> open?.let { o -> m.clickable(role = Role.Button) { openIncident(o.id) } } ?: m },
+        color = container, border = border, radius = 24.dp,
     ) {
         Column(Modifier.padding(20.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, Modifier.size(36.dp), tint = statusColor(state))
-                Text(title, Modifier.padding(start = 14.dp), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+            Box(Modifier.size(40.dp).clip(CircleShape).background(foreground.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                Icon(icon, null, Modifier.size(24.dp), tint = foreground)
             }
-            Spacer(Modifier.height(14.dp))
-            Row {
-                StatTile("checks healthy", "${s.checks.count { it.healthy }}/${s.checks.size}", Modifier.weight(1f))
-                StatTile("uptime, 30 days", percent(overall), Modifier.weight(1f))
-                StatTile(if (open != null) "ongoing" else "last checked", if (open != null) duration(open.started, null) else ago(s.now, data.now), Modifier.weight(1f))
-            }
+            Text(if (state == "ok" && waiting > 0) "Checks are passing" else title, Modifier.padding(top = 12.dp), style = MaterialTheme.typography.headlineSmall)
             if (open != null) {
-                Text(
-                    "Since ${clock(open.started)} · tap for the timeline",
-                    Modifier.padding(top = 10.dp), style = MaterialTheme.typography.bodyMedium,
-                )
+                Text(open.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Since ${clock(open.started)} · ${duration(open.started, null)} ongoing", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = foreground)
+            } else if (s.incidents.isEmpty() && state == "ok") {
+                Text("No incidents in 30 days", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (waiting > 0 && state != "unknown") {
+                Text("$waiting ${if (waiting == 1) "check waiting" else "checks waiting"} for a first run", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Row(Modifier.fillMaxWidth().padding(top = 24.dp)) {
+                StatTile("healthy checks", "${s.checks.count { it.status == "ok" }} / ${s.checks.size}", Modifier.weight(1f))
+                StatTile("uptime, 30 days", percent(overall), Modifier.weight(1f))
             }
         }
     }
@@ -335,45 +342,46 @@ private fun HeroCard(s: Status, data: MonitorState, openIncident: (Int) -> Unit)
 
 @Composable
 fun IncidentRow(inc: Incident, now: Instant, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusDot(if (inc.ended == null) StatusColors.down else StatusColors.ok)
-        Column(Modifier.padding(start = 14.dp).weight(1f)) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 72.dp).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        StatusDot(if (inc.ended == null) StatusColors.down else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+        Column(Modifier.padding(start = 16.dp, end = 8.dp).weight(1f)) {
             Text(inc.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
                 if (inc.ended == null) "Ongoing for ${duration(inc.started, null)}" else "${ago(inc.started, now)} · lasted ${duration(inc.started, inc.ended)}",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Icon(Icons.Rounded.ChevronRight, null, Modifier.size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-private fun GroupCard(label: String, checks: List<Check>, open: Boolean, onToggle: () -> Unit, openCheck: (String) -> Unit) {
+private fun CheckGroup(label: String, checks: List<Check>, open: Boolean, onToggle: () -> Unit, openCheck: (String) -> Unit) {
     val down = checks.count { it.status == "down" }
     val recovering = checks.count { it.status == "warn" }
-    val up = checks.count { it.healthy }
+    val waiting = checks.count { it.status == "unknown" }
     val summary = when {
         down > 0 -> "$down down"
         recovering > 0 -> "$recovering recovering"
-        else -> "$up of ${checks.size} up"
+        waiting > 0 -> "$waiting waiting"
+        else -> "${checks.size} of ${checks.size} up"
     }
-    val rotation by animateFloatAsState(if (open) 180f else 0f, label = "chevron")
-    ElevatedCard(Modifier.fillMaxWidth()) {
+    val state = worst(checks)
+    val rotation by animateFloatAsState(if (open) 180f else 0f, tween(200), label = "chevron")
+    Column(Modifier.animateContentSize(tween(200))) {
         Row(
-            Modifier.fillMaxWidth().clickable(onClick = onToggle).padding(start = 16.dp, end = 12.dp, top = 14.dp, bottom = 14.dp),
+            Modifier.fillMaxWidth().semantics { stateDescription = if (open) "Expanded" else "Collapsed" }.clickable(role = Role.Button, onClick = onToggle).heightIn(min = 56.dp).padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatusDot(statusColor(worst(checks)), 12.dp)
-            Text(label, Modifier.padding(start = 14.dp).weight(1f), style = MaterialTheme.typography.titleMedium)
-            Text(summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Icon(Icons.Filled.ExpandMore, if (open) "Collapse" else "Expand", Modifier.padding(start = 4.dp).rotate(rotation))
+            StatusDot(if (state == "ok") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else statusColor(state))
+            Text(label, Modifier.padding(start = 16.dp, end = 8.dp).weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
+            StatusPill(summary, state, neutralWhenOk = true)
+            Icon(Icons.Rounded.ExpandMore, if (open) "Collapse $label" else "Expand $label", Modifier.padding(start = 8.dp).size(20.dp).rotate(rotation), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        AnimatedVisibility(open) {
-            Column {
-                checks.forEach { c ->
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    CheckRow(c) { openCheck(c.id) }
-                }
+        if (open) {
+            checks.forEach { c ->
+                InsetDivider()
+                CheckRow(c) { openCheck(c.id) }
             }
         }
     }
@@ -381,29 +389,23 @@ private fun GroupCard(label: String, checks: List<Check>, open: Boolean, onToggl
 
 @Composable
 private fun CheckRow(c: Check, onClick: () -> Unit) {
-    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            StatusDot(statusColor(c.status))
-            Text(c.name, Modifier.padding(start = 14.dp).weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val trailing = when {
-                c.status == "down" -> statusWord(c.status)
-                c.ms != null -> millis(c.ms)
-                c.status == "unknown" -> "waiting"
-                else -> null
-            }
-            trailing?.let {
-                Text(it, style = MaterialTheme.typography.bodyMedium, color = if (c.status == "down") StatusColors.down else MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            StatusDot(if (c.status == "ok") StatusColors.ok.copy(alpha = 0.55f) else statusColor(c.status), 6.dp)
+            Text(c.name, Modifier.padding(start = 18.dp, end = 12.dp).weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                when { c.status == "down" -> "Down"; c.status == "unknown" -> "Waiting"; else -> millis(c.ms) },
+                Modifier.width(76.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                style = MaterialTheme.typography.bodySmall, color = if (c.status == "down") StatusColors.down else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
-        if (c.days.isNotEmpty()) {
-            Row(Modifier.padding(start = 24.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                UptimeBars(c.days, Modifier.weight(1f), height = 12.dp)
-                Spacer(Modifier.width(10.dp))
-                Text(percent(c.uptime), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+        Row(Modifier.padding(start = 24.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            UptimeBars(c.days, Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            Text(percent(c.uptime), Modifier.width(76.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        if (c.status == "down" || c.status == "warn") {
-            Text(c.note, Modifier.padding(start = 24.dp, top = 6.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if ((c.status == "down" || c.status == "warn") && c.note.isNotBlank()) {
+            Text(c.note.replaceFirstChar { it.uppercase() }, Modifier.padding(start = 24.dp, top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
