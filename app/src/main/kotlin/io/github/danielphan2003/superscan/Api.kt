@@ -73,7 +73,8 @@ class Api(private val server: String, private val token: String? = null) {
     /** Public: the monitor's name and VAPID key, before pairing. */
     suspend fun info(): Pair<String, String?> {
         val j = call("GET", "/api/info")
-        return j.optString("name", "monitor") to j.optString("vapid").ifEmpty { null }
+        // org.json turns a JSON null into the string "null"; treat it as no key.
+        return j.optString("name", "monitor") to (if (j.isNull("vapid")) null else j.optString("vapid").ifEmpty { null })
     }
 
     /** Trade a one-time pairing code for this device's token. */

@@ -9,6 +9,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -167,6 +168,8 @@ fun HomeScreen(
                 subtitle = data.status?.let { "Updated ${ago(it.now, data.now)} · every minute" } ?: "Connecting to your monitor",
                 scrolled = scrolled,
                 actions = {
+                    // The menu anchors to its parent: a Box around the button, not the whole header row.
+                    Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, "More options") }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                         DropdownMenuItem(text = { Text("Send test alert") }, onClick = {
@@ -189,6 +192,7 @@ fun HomeScreen(
                         })
                         DropdownMenuItem(text = { Text("Re-register alerts") }, onClick = { menu = false; reRegister() })
                         DropdownMenuItem(text = { Text("Unpair") }, onClick = { menu = false; confirmUnpair = true })
+                    }
                     }
                 },
             )

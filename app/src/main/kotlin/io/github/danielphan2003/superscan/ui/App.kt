@@ -187,7 +187,11 @@ private fun SetupScreen(activity: ComponentActivity, onPaired: () -> Unit) {
                 store.token = token
                 store.monitorName = name
                 store.endpointSent = false
-                connectPush(activity, store, vapid)
+                // Paired from here on: a push registration problem shows as a
+                // notice on the home screen instead of failing the pairing.
+                runCatching { connectPush(activity, store, vapid) }.onFailure {
+                    store.pushProblem = "Couldn't register for alerts: ${it.message ?: it.javaClass.simpleName}"
+                }
                 onPaired()
             } catch (e: Exception) {
                 error = e.message ?: "Pairing failed"
