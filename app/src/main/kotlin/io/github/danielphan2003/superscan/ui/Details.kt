@@ -198,17 +198,15 @@ fun CheckScreen(data: MonitorState, id: String, onBack: () -> Unit, openIncident
                         Text(statusWord(c.status), Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall)
                     }
                     if (c.note.isNotEmpty()) Text(c.note.replaceFirstChar { it.uppercase() }, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    StatTile("uptime, 30 days", percent(c.uptime), Modifier.padding(top = 24.dp))
-                    Row(Modifier.fillMaxWidth().padding(top = 20.dp)) {
-                        if (c.status == "down" && c.ms == null) {
-                            Column(Modifier.weight(1f)) {
-                                Text("No response", style = MaterialTheme.typography.labelLarge)
-                                Text("response now", Modifier.padding(top = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        } else {
-                            StatTile("response now", millis(c.ms), Modifier.weight(1f), large = false)
+                    if (c.uptime == null && c.ms == null && c.avgMs == null) {
+                        // Nothing measured yet: one line instead of a row of dashes.
+                        Text("No data yet", Modifier.padding(top = 20.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        StatTile("uptime, 30 days", percent(c.uptime), Modifier.padding(top = 24.dp))
+                        Row(Modifier.fillMaxWidth().padding(top = 20.dp)) {
+                            StatTile("response now", if (c.status == "down" && c.ms == null) "No response" else millis(c.ms), Modifier.weight(1f), large = false)
+                            StatTile("average response", millis(c.avgMs), Modifier.weight(1f), large = false)
                         }
-                        StatTile("average response", millis(c.avgMs), Modifier.weight(1f), large = false)
                     }
                 }
             }
