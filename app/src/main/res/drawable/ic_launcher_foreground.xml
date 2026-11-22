@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A scan: two rings, a sweep and the point it found. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,30a24,24 0,1 1,0 48a24,24 0,1 1,0 -48"
+        android:strokeWidth="3"
+        android:strokeColor="#FF7EE0C3"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54,42a12,12 0,1 1,0 24a12,12 0,1 1,0 -24"
+        android:strokeWidth="3"
+        android:strokeColor="#FF7EE0C3"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54,54L71,37"
+        android:strokeWidth="3.5"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFFFF" />
+    <path
+        android:pathData="M66,46a3.5,3.5 0,1 1,0 7a3.5,3.5 0,1 1,0 -7"
+        android:fillColor="#FFFFB86B" />
+    <path
+        android:pathData="M54,51a3,3 0,1 1,0 6a3,3 0,1 1,0 -6"
+        android:fillColor="#FFFFFFFF" />
+</vector>

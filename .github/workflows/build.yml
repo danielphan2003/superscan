@@ -1,0 +1,53 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write # create the release on a tag
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Android SDK packages
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;37.0.0" > /dev/null
+      - uses: gradle/actions/setup-gradle@v5
+
+      - name: Debug build
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Signing key
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        run: |
+          umask 077
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > release.jks
+          printf 'storeFile=release.jks\nstorePassword=%s\nkeyAlias=superscan\nkeyPassword=%s\n' "$KEYSTORE_PASSWORD" "$KEYSTORE_PASSWORD" > keystore.properties
+      - name: Release build
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          ./gradlew --no-daemon assembleRelease
+          version=${GITHUB_REF_NAME#v}
+          cp app/build/outputs/apk/release/app-release.apk "superscan-$version.apk"
+          sha256sum "superscan-$version.apk" > "superscan-$version.apk.sha256"
+          "$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "superscan-$version.apk" | grep -E 'SHA-256 digest|Signer #1 certificate DN'
+          rm -f release.jks keystore.properties
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" superscan-*.apk superscan-*.apk.sha256 --title "Superscan ${GITHUB_REF_NAME#v}" --notes "Built by GitHub Actions from ${GITHUB_SHA}."

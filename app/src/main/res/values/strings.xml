@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Superscan</string>
+    <string name="channel_alerts">Alerts</string>
+    <string name="channel_alerts_description">A service went down</string>
+    <string name="channel_updates">Updates</string>
+    <string name="channel_updates_description">Recoveries and other news from the monitor</string>
+</resources>
