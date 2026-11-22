@@ -32,7 +32,7 @@ private val Manrope = FontFamily(
 
 private fun type(size: Int, line: Int, weight: FontWeight = FontWeight.Normal) = TextStyle(
     fontFamily = Manrope, fontWeight = weight, fontSize = size.sp, lineHeight = line.sp,
-    letterSpacing = 0.sp, fontFeatureSettings = "tnum",
+    letterSpacing = 0.sp,
 )
 
 private val SuperscanTypography = Typography(
@@ -112,7 +112,7 @@ fun SuperscanTheme(content: @Composable () -> Unit) {
 
 object StatusColors {
     val ok: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFF98C9B5) else Color(0xFF28634F)
-    val warn: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE5C17D) else Color(0xFF835B16)
+    val warn: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFE5C17D) else Color(0xFF9A6A00)
     val down: Color @Composable get() = if (isSystemInDarkTheme()) Color(0xFFF2AAA5) else Color(0xFFAD3835)
     val unknown: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 }
@@ -122,9 +122,15 @@ data class StatusTone(val foreground: Color, val container: Color, val border: C
 @Composable
 fun statusTone(status: String): StatusTone {
     val foreground = statusColor(status)
+    val tint = when (status) {
+        "ok" -> Color(0xFF198A64)
+        "warn" -> Color(0xFFF5A000)
+        "down" -> Color(0xFFE53935)
+        else -> foreground
+    }
     return StatusTone(
         foreground,
-        foreground.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surfaceContainer),
+        tint.copy(alpha = 0.12f).compositeOver(MaterialTheme.colorScheme.surfaceContainer),
         foreground.copy(alpha = 0.30f),
     )
 }

@@ -8,9 +8,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -24,16 +22,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ChevronRight
-import androidx.compose.material.icons.rounded.Error
 import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.NotificationsOff
-import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -60,7 +53,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -250,7 +242,10 @@ fun HomeScreen(
                 if (recent.isNotEmpty()) {
                     item(key = "incidents") {
                         SectionHeader("Recent incidents") {
-                            if (s.incidents.size > 3) TextButton(onClick = { navigate(Route.Incidents) }) { Text("See all") }
+                            if (s.incidents.size > 3) {
+                                // Clickable expands its touch target to 48dp without enlarging this row.
+                                Text("See all", Modifier.clickable(role = Role.Button) { navigate(Route.Incidents) }.padding(horizontal = 8.dp), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            }
                         }
                         FlatCard {
                             recent.forEachIndexed { i, inc ->
@@ -301,11 +296,11 @@ private fun Notice(icon: ImageVector, text: String, action: String? = null, onAc
 private fun HeroCard(s: Status, openIncident: (Int) -> Unit) {
     val open = s.incidents.firstOrNull { it.ended == null }
     val state = if (open != null) "down" else worst(s.checks)
-    val (icon, title) = when (state) {
-        "down" -> Icons.Rounded.Error to "Checks need attention"
-        "warn" -> Icons.Rounded.Warning to "Recovering"
-        "unknown" -> Icons.Rounded.Schedule to "Waiting for checks"
-        else -> Icons.Rounded.CheckCircle to "All systems operational"
+    val title = when (state) {
+        "down" -> "Checks need attention"
+        "warn" -> "Recovering"
+        "unknown" -> "Waiting for checks"
+        else -> "All systems operational"
     }
     val waiting = s.checks.count { it.status == "unknown" }
     val tone = statusTone(state)
@@ -319,13 +314,14 @@ private fun HeroCard(s: Status, openIncident: (Int) -> Unit) {
         color = container, border = border, radius = 24.dp,
     ) {
         Column(Modifier.padding(20.dp)) {
-            Box(Modifier.size(40.dp).clip(CircleShape).background(foreground.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-                Icon(icon, null, Modifier.size(24.dp), tint = foreground)
-            }
+            StatusIcon(state, foreground)
             Text(if (state == "ok" && waiting > 0) "Checks are passing" else title, Modifier.padding(top = 12.dp), style = MaterialTheme.typography.headlineSmall)
             if (open != null) {
-                Text(open.title, Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Since ${clock(open.started)} · ${duration(open.started, null)} ongoing", Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = foreground)
+                Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(open.title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Icon(Icons.Rounded.ChevronRight, null, Modifier.padding(start = 8.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(tabularNumbers("Since ${clock(open.started)} · ${duration(open.started, null)} ongoing"), Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodySmall, color = foreground)
             } else if (s.incidents.isEmpty() && state == "ok") {
                 Text("No incidents in 30 days", Modifier.padding(top = 6.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -343,11 +339,11 @@ private fun HeroCard(s: Status, openIncident: (Int) -> Unit) {
 @Composable
 fun IncidentRow(inc: Incident, now: Instant, onClick: () -> Unit) {
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).heightIn(min = 72.dp).padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        StatusDot(if (inc.ended == null) StatusColors.down else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+        StatusDot(if (inc.ended == null) StatusColors.down else StatusColors.ok.copy(alpha = 0.55f))
         Column(Modifier.padding(start = 16.dp, end = 8.dp).weight(1f)) {
             Text(inc.title, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(
-                if (inc.ended == null) "Ongoing for ${duration(inc.started, null)}" else "${ago(inc.started, now)} · lasted ${duration(inc.started, inc.ended)}",
+                tabularNumbers(if (inc.ended == null) "Ongoing for ${duration(inc.started, null)}" else "${ago(inc.started, now)} · lasted ${duration(inc.started, inc.ended)}"),
                 Modifier.padding(top = 4.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
@@ -364,7 +360,7 @@ private fun CheckGroup(label: String, checks: List<Check>, open: Boolean, onTogg
         down > 0 -> "$down down"
         recovering > 0 -> "$recovering recovering"
         waiting > 0 -> "$waiting waiting"
-        else -> "${checks.size} of ${checks.size} up"
+        else -> "${checks.size}/${checks.size}"
     }
     val state = worst(checks)
     val rotation by animateFloatAsState(if (open) 180f else 0f, tween(200), label = "chevron")
@@ -373,9 +369,13 @@ private fun CheckGroup(label: String, checks: List<Check>, open: Boolean, onTogg
             Modifier.fillMaxWidth().semantics { stateDescription = if (open) "Expanded" else "Collapsed" }.clickable(role = Role.Button, onClick = onToggle).heightIn(min = 56.dp).padding(start = 16.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            StatusDot(if (state == "ok") MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f) else statusColor(state))
-            Text(label, Modifier.padding(start = 16.dp, end = 8.dp).weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
-            StatusPill(summary, state, neutralWhenOk = true)
+            StatusDot(if (state == "ok") StatusColors.ok.copy(alpha = 0.55f) else statusColor(state))
+            Text(label, Modifier.padding(start = 16.dp, end = 8.dp).weight(1f), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            if (down == 0 && recovering == 0 && waiting == 0) {
+                Text(tabularNumbers(summary), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                StatusPill(summary, if (waiting > 0 && state == "ok") "unknown" else state)
+            }
             Icon(Icons.Rounded.ExpandMore, if (open) "Collapse $label" else "Expand $label", Modifier.padding(start = 8.dp).size(20.dp).rotate(rotation), tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (open) {
@@ -392,9 +392,9 @@ private fun CheckRow(c: Check, onClick: () -> Unit) {
     Column(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             StatusDot(if (c.status == "ok") StatusColors.ok.copy(alpha = 0.55f) else statusColor(c.status), 6.dp)
-            Text(c.name, Modifier.padding(start = 18.dp, end = 12.dp).weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(c.name, Modifier.padding(start = 18.dp, end = 12.dp).weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                when { c.status == "down" -> "Down"; c.status == "unknown" -> "Waiting"; else -> millis(c.ms) },
+                tabularNumbers(when { c.status == "down" -> "Down"; c.status == "unknown" -> "Waiting"; else -> millis(c.ms) }),
                 Modifier.width(76.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End,
                 style = MaterialTheme.typography.bodySmall, color = if (c.status == "down") StatusColors.down else MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -402,7 +402,7 @@ private fun CheckRow(c: Check, onClick: () -> Unit) {
         Row(Modifier.padding(start = 24.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             UptimeBars(c.days, Modifier.weight(1f))
             Spacer(Modifier.width(12.dp))
-            Text(percent(c.uptime), Modifier.width(76.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tabularNumbers(percent(c.uptime)), Modifier.width(76.dp), textAlign = androidx.compose.ui.text.style.TextAlign.End, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if ((c.status == "down" || c.status == "warn") && c.note.isNotBlank()) {
             Text(c.note.replaceFirstChar { it.uppercase() }, Modifier.padding(start = 24.dp, top = 8.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

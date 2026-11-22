@@ -113,7 +113,7 @@ fun IncidentScreen(data: MonitorState, id: Int, onBack: () -> Unit, openCheck: (
             Text(inc.title, Modifier.padding(top = 12.dp, bottom = 20.dp), style = MaterialTheme.typography.headlineSmall)
             FlatCard {
                 Column(Modifier.padding(16.dp)) {
-                    Text("Started ${clock(inc.started)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(tabularNumbers("Started ${clock(inc.started)}"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(Modifier.padding(top = 12.dp)) {
                         StatTile(if (ongoing) "ongoing" else "duration", duration(inc.started, inc.ended), Modifier.weight(1f))
                         StatTile("affected checks", inc.checks.size.toString(), Modifier.weight(1f))
@@ -135,7 +135,7 @@ fun IncidentScreen(data: MonitorState, id: Int, onBack: () -> Unit, openCheck: (
                     ) {
                         StatusDot(statusColor(check?.status ?: "unknown"))
                         Text(name, Modifier.padding(start = 16.dp, end = 8.dp).weight(1f), style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text("${statusWord(check?.status ?: "unknown")} now", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${statusWord(check?.status ?: "unknown")} now", style = MaterialTheme.typography.bodySmall, color = statusColor(check?.status ?: "unknown"))
                         if (check != null) Icon(Icons.Rounded.ChevronRight, null, Modifier.padding(start = 8.dp).size(18.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
@@ -145,7 +145,12 @@ fun IncidentScreen(data: MonitorState, id: Int, onBack: () -> Unit, openCheck: (
             SectionHeader("Timeline")
             FlatCard {
                 Column(Modifier.padding(vertical = 16.dp)) {
-                    inc.notes.forEachIndexed { i, n -> TimelineEntry(n.at, n.text, first = i == 0, last = i == inc.notes.lastIndex) }
+                    inc.notes.forEachIndexed { i, n ->
+                        if (i == 0 || calendarDate(n.at) != calendarDate(inc.notes[i - 1].at)) {
+                            Text(dateLabel(n.at), Modifier.padding(start = 16.dp, top = if (i == 0) 0.dp else 8.dp, bottom = 12.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TimelineEntry(n.at, n.text, first = i == 0, last = i == inc.notes.lastIndex)
+                    }
                 }
             }
         }
@@ -154,16 +159,15 @@ fun IncidentScreen(data: MonitorState, id: Int, onBack: () -> Unit, openCheck: (
 
 @Composable
 private fun TimelineEntry(at: String, text: String, first: Boolean, last: Boolean) {
-    val words = text.lowercase()
     val color = when {
-        listOf("resolved", "back", "recover", "healthy", "passing").any { it in words } -> StatusColors.ok
-        "alert" in words -> StatusColors.warn
-        first || "fail" in words || "down" in words -> StatusColors.down
+        text.startsWith("First failure:") || text.startsWith("Also down:") -> StatusColors.down
+        text.startsWith("Alerted:") -> StatusColors.warn
+        text.startsWith("Back:") || text.startsWith("Resolved after") -> StatusColors.ok
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     val line = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
     Row(Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(horizontal = 16.dp)) {
-        Text(clock(at).substringAfterLast(", "), Modifier.width(48.dp).padding(top = 1.dp).semantics { contentDescription = clock(at) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(tabularNumbers(clock(at).substringAfterLast(", ")), Modifier.width(48.dp).padding(top = 1.dp).semantics { contentDescription = clock(at) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Column(Modifier.width(24.dp).fillMaxHeight(), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(Modifier.width(1.dp).height(6.dp).background(if (first) Color.Transparent else line))
             Box(Modifier.size(8.dp).background(color, CircleShape))
@@ -190,13 +194,20 @@ fun CheckScreen(data: MonitorState, id: String, onBack: () -> Unit, openIncident
             FlatCard(color = tone.container, border = tone.border, radius = 24.dp) {
                 Column(Modifier.padding(20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        StatusDot(tone.foreground)
+                        StatusIcon(c.status)
                         Text(statusWord(c.status), Modifier.padding(start = 12.dp), style = MaterialTheme.typography.headlineSmall)
                     }
                     if (c.note.isNotEmpty()) Text(c.note.replaceFirstChar { it.uppercase() }, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     StatTile("uptime, 30 days", percent(c.uptime), Modifier.padding(top = 24.dp))
                     Row(Modifier.fillMaxWidth().padding(top = 20.dp)) {
-                        StatTile("response now", millis(c.ms), Modifier.weight(1f), large = false)
+                        if (c.status == "down" && c.ms == null) {
+                            Column(Modifier.weight(1f)) {
+                                Text("No response", style = MaterialTheme.typography.labelLarge)
+                                Text("response now", Modifier.padding(top = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        } else {
+                            StatTile("response now", millis(c.ms), Modifier.weight(1f), large = false)
+                        }
                         StatTile("average response", millis(c.avgMs), Modifier.weight(1f), large = false)
                     }
                 }

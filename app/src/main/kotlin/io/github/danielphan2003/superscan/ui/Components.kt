@@ -22,6 +22,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Error
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,6 +44,9 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -53,6 +60,22 @@ import java.time.format.DateTimeFormatter
 private val zone = ZoneId.systemDefault()
 private val timeFormat = DateTimeFormatter.ofPattern("HH:mm").withZone(zone)
 private val dayTimeFormat = DateTimeFormatter.ofPattern("d MMM, HH:mm").withZone(zone)
+private val dateFormat = DateTimeFormatter.ofPattern("d MMM yyyy").withZone(zone)
+private val numbers = Regex("[0-9]+(?:[.,:/][0-9]+)*")
+
+/** Keep prose proportional while aligning the numeric parts of measurements. */
+fun tabularNumbers(text: String) = buildAnnotatedString {
+    var end = 0
+    numbers.findAll(text).forEach { match ->
+        append(text.substring(end, match.range.first))
+        withStyle(SpanStyle(fontFeatureSettings = "tnum")) { append(match.value) }
+        end = match.range.last + 1
+    }
+    append(text.substring(end))
+}
+
+fun calendarDate(iso: String) = parse(iso)?.atZone(zone)?.toLocalDate()
+fun dateLabel(iso: String) = parse(iso)?.let(dateFormat::format).orEmpty()
 
 fun parse(iso: String?): Instant? = iso?.let { runCatching { Instant.parse(it) }.getOrNull() }
 
@@ -114,6 +137,19 @@ fun statusWord(status: String) = when (status) {
 @Composable
 fun StatusDot(color: Color, size: Dp = 8.dp) {
     Box(Modifier.size(size).clip(CircleShape).background(color))
+}
+
+@Composable
+fun StatusIcon(status: String, color: Color = statusColor(status)) {
+    val icon = when (status) {
+        "down" -> Icons.Rounded.Error
+        "warn" -> Icons.Rounded.Warning
+        "unknown" -> Icons.Rounded.Schedule
+        else -> Icons.Rounded.CheckCircle
+    }
+    Box(Modifier.size(40.dp).clip(CircleShape).background(color.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+        Icon(icon, null, Modifier.size(24.dp), tint = color)
+    }
 }
 
 /** Flat grouped surfaces, with no elevation or shadow. */
@@ -203,21 +239,20 @@ fun SectionHeader(text: String, top: Dp = 24.dp, trailing: (@Composable () -> Un
 @Composable
 fun StatTile(label: String, value: String, modifier: Modifier = Modifier, large: Boolean = true) {
     Column(modifier) {
-        Text(value, style = if (large) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge)
+        Text(tabularNumbers(value), style = if (large) MaterialTheme.typography.headlineMedium else MaterialTheme.typography.titleLarge)
         Text(label, Modifier.padding(top = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
 @Composable
-fun StatusPill(text: String, status: String, neutralWhenOk: Boolean = false) {
+fun StatusPill(text: String, status: String) {
     val tone = statusTone(status)
-    val neutral = neutralWhenOk && status == "ok"
     Surface(
-        color = if (neutral) MaterialTheme.colorScheme.surfaceContainerHigh else tone.container,
-        contentColor = if (neutral) MaterialTheme.colorScheme.onSurfaceVariant else tone.foreground,
+        color = tone.container,
+        contentColor = tone.foreground,
         shape = RoundedCornerShape(8.dp),
     ) {
-        Text(text, Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
+        Text(tabularNumbers(text), Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelMedium)
     }
 }
 
