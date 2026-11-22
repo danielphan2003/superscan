@@ -11,6 +11,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import org.unifiedpush.android.connector.FailedReason
 import org.unifiedpush.android.connector.PushService
@@ -28,15 +30,17 @@ object Events {
     fun emit() { changed.value = System.nanoTime() }
 }
 
+private val syncLock = Mutex()
+
 /** Sends the current push endpoint to the monitor, if it does not have it yet. */
-suspend fun syncEndpoint(context: Context) {
+suspend fun syncEndpoint(context: Context) = syncLock.withLock {
     val store = Store(context)
-    val server = store.server ?: return
-    val token = store.token ?: return
-    val endpoint = store.endpoint ?: return
-    val p256dh = store.p256dh ?: return
-    val auth = store.auth ?: return
-    if (store.endpointSent) return
+    val server = store.server ?: return@withLock
+    val token = store.token ?: return@withLock
+    val endpoint = store.endpoint ?: return@withLock
+    val p256dh = store.p256dh ?: return@withLock
+    val auth = store.auth ?: return@withLock
+    if (store.endpointSent) return@withLock
     try {
         Api(server, token).sendSubscription(endpoint, p256dh, auth)
         store.endpointSent = true
@@ -139,9 +143,11 @@ object Notifications {
             .setContentIntent(pending)
             .setAutoCancel(true)
             .setCategory(if (alert) android.app.Notification.CATEGORY_ERROR else android.app.Notification.CATEGORY_STATUS)
+            .setColor(if (alert) 0xFFD9473F.toInt() else 0xFF2E9E6B.toInt())
             .build()
         val nm = context.getSystemService(NotificationManager::class.java)
-        // One notification per incident: updates replace the earlier one.
-        nm.notify(incident ?: System.currentTimeMillis().toInt(), notification)
+        // One notification per incident, and one for news without an incident:
+        // updates replace the earlier one instead of stacking.
+        nm.notify(incident ?: 0, notification)
     }
 }

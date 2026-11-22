@@ -9,7 +9,25 @@ import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 
-data class Check(val id: String, val name: String, val group: String, val status: String, val note: String)
+data class Day(val day: String, val ok: Int, val fail: Int)
+data class Check(
+    val id: String,
+    val name: String,
+    val group: String,
+    val status: String,
+    val note: String,
+    /** Last response time, ms. */
+    val ms: Int?,
+    /** Average response time over the last 30 days, ms. */
+    val avgMs: Int?,
+    /** Share of passing runs over the last 30 days, percent. */
+    val uptime: Double?,
+    /** The last 30 UTC days, oldest first. */
+    val days: List<Day>,
+    val lastFail: String?,
+    /** What the check does, in a sentence. */
+    val what: String,
+)
 data class Note(val at: String, val text: String)
 data class Incident(
     val id: Int,
@@ -71,6 +89,11 @@ class Api(private val server: String, private val token: String? = null) {
         call("DELETE", "/api/device")
     }
 
+    /** Asks the monitor to push a test alert to this device. */
+    suspend fun test() {
+        call("POST", "/api/test")
+    }
+
     /** A short-lived link that signs this browser in to the status page. */
     suspend fun webLink(): String = call("POST", "/api/weblink").getString("url")
 
@@ -80,7 +103,19 @@ class Api(private val server: String, private val token: String? = null) {
             name = j.optString("name"),
             now = j.optString("now"),
             checks = j.getJSONArray("checks").objects().map {
-                Check(it.getString("id"), it.getString("name"), it.getString("group"), it.getString("status"), it.optString("note"))
+                Check(
+                    id = it.getString("id"),
+                    name = it.getString("name"),
+                    group = it.getString("group"),
+                    status = it.getString("status"),
+                    note = it.optString("note"),
+                    ms = it.optIntOrNull("ms"),
+                    avgMs = it.optIntOrNull("avgMs"),
+                    uptime = if (it.isNull("uptime") || !it.has("uptime")) null else it.getDouble("uptime"),
+                    days = it.optJSONArray("days")?.objects()?.map { d -> Day(d.getString("day"), d.getInt("ok"), d.getInt("fail")) }.orEmpty(),
+                    lastFail = it.optStringOrNull("lastFail"),
+                    what = it.optString("what"),
+                )
             },
             incidents = j.getJSONArray("incidents").objects().map { i ->
                 Incident(
@@ -96,5 +131,7 @@ class Api(private val server: String, private val token: String? = null) {
     }
 }
 
+private fun JSONObject.optIntOrNull(key: String): Int? = if (!has(key) || isNull(key)) null else getInt(key)
+private fun JSONObject.optStringOrNull(key: String): String? = if (!has(key) || isNull(key)) null else getString(key)
 private fun JSONArray.objects(): List<JSONObject> = (0 until length()).map { getJSONObject(it) }
 private fun JSONArray.strings(): List<String> = (0 until length()).map { getString(it) }
